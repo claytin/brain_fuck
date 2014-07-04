@@ -1,0 +1,55 @@
+
+initialize #4 #4 an #6 to ascii 0
+>
+++++++			repeate 6 times
+[
+	>++++++++   repeate 8 times
+	[
+		>+++
+		>+
+		>+
+		>+
+		<<<<-
+	]
+	<-
+]
+
+move to first digit
+>>>
+
+<<<++++
+[
+	>+++++
+	[
+		>-
+		<-
+	]
+	<-
+]
+
+>>>
+
+[
+	print digits
+	.>.>.<<
+	print div
+	<.>
+
+	increment
+	>>>>>+
+	----------
+	[
+		>
+		+
+		<+
+	]
+	[
+		>
+		-
+		<+
+	]
+	
+	<<<<<
+	>>+
+	<<
+]

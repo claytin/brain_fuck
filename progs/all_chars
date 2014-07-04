@@ -1,0 +1,33 @@
+#!/usr/bin/env bfuck
+output all printable chars
+
++++++			repeate 5 times
+[
+	>++++++ 	repeate 6 times
+	[
+		>+  	increment #2 5*6 times
+		>+++	and #3 5*6*3 times
+		<<-
+	]
+	<-
+]
+>>++ 			#2 is now 32
+>+++++  		and #3 is 95
+
+
+[
+	<   		move to #2
+	.+  		print and inrement #2
+	>-  		decrement #3
+]   			then check it
+
+new line at end
++++++
+[>++
+	[
+		>+
+		<-
+	]
+	<-
+]
+>>.
