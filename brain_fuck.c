@@ -4,42 +4,66 @@
 #include <stdbool.h>
 #include <unistd.h>
 
-#define PROG_DATA_SIZE 250
+#define DEFAULT_PROG_DATA_SIZE 250
 #define DEBUG_OUTPUT_SIZE 100
-#define PROG_BUF_BLOCK 1
+#define PROG_BUF_BLOCK 16
 
-void printdebug(char *program, int *program_data,
+void printdebug(char *program, long int *program_data,
 	unsigned int data_pos, unsigned int prog_pos, char *output);
 void printusage(char *cmd);
 char* loadprogram(char *path);
 
 //debug stuff
 unsigned int break_point = 0, break_step = 0;
+unsigned long int prog_data_size = DEFAULT_PROG_DATA_SIZE;
 
 int main(int argc, char **argv){
-	bool debug = false, path_set = false;
+	bool debug = false, path_set = false, eof_do_nothing = true;
+	bool prog_from_args = false, dynamic_allocate = false, allow_neg = true;
 	char *prog_file_path;
+	unsigned int eof_num = 0;
+	char *program;
 
-	//arg stuff
+	//arg stuff (this could be nicer)
 	if(argc >= 2){
 		int i;
 		for(i = 1; i < argc; i++){
-			if(argv[i][0] == '-'){
-				switch(argv[i][1]){
-					case 'd':
-						debug = true;
-						break;
-					case 'b':
-						break_point = strtol(argv[i + 1], NULL, 10);
-						i++;	//don't read next arg
-						break;
-					case 's':
-						break_step = strtol(argv[i + 1], NULL, 10);
-						i++;
-						break;
+			if(strcmp(argv[i], "--help") == 0
+			|| strcmp(argv[i], "-h") == 0){
+				printusage(argv[0]);
+				return 0;
+			}else if(strcmp(argv[i], "--debug") == 0
+			|| strcmp(argv[i], "-d") == 0){
+				debug = true;
+			}else if(strcmp(argv[i], "--eof") == 0
+			|| strcmp(argv[i], "-e") == 0){
+				eof_do_nothing = false;
+				eof_num = (int)strtol(argv[i + 1], NULL, 10);
+				i++;
+			}else if(strcmp(argv[i], "--prog") == 0
+			|| strcmp(argv[i], "-p") == 0){
+				prog_from_args = true;
+				program = argv[i + 1];
+				i++;
+			}else if(strcmp(argv[i], "--mem") == 0
+			|| strcmp(argv[i], "-m") == 0){
+				prog_data_size = (int)strtol(argv[i + 1], NULL, 10);
+				if(prog_data_size <= 0){
+					dynamic_allocate = true;
 				}
-
-			}else{
+				i++;
+			}else if(strcmp(argv[i], "--noneg") == 0
+			|| strcmp(argv[i], "n") == 0){
+				allow_neg = false;
+			}else if(strcmp(argv[i], "--step") == 0
+			|| strcmp(argv[i], "-s") == 0){
+				break_step = (int)strtol(argv[i + 1], NULL, 10);
+				i++;
+			}else if(strcmp(argv[i], "--break") == 0
+			|| strcmp(argv[i], "-b") == 0){
+				break_point = (int)strtol(argv[i + 1], NULL, 10);
+				i++;
+			}else if(!prog_from_args){
 				prog_file_path = argv[i];
 				path_set = true;
 			}
@@ -51,13 +75,12 @@ int main(int argc, char **argv){
 	}
 
 	//load from file
-	char *program;
-	if(path_set){
+	if(path_set && !prog_from_args){
 		program = loadprogram(prog_file_path);
 		if(program == NULL){
 			return 1;
 		}
-	}else{
+	}else if(!prog_from_args){
 		fprintf(stderr, "must specify a file\n");
 		printusage(argv[0]);
 		return 1;
@@ -65,13 +88,14 @@ int main(int argc, char **argv){
 
 
 	unsigned int cur_cmd = 0;
-	int *prog_data;
+	unsigned int remaining_cells = prog_data_size;
+	long int *prog_data;
 
 	//allocate space for program to
-	prog_data = (int*)malloc(sizeof(int*) * PROG_DATA_SIZE);
+	prog_data = (long int*)malloc(sizeof(long int*) * prog_data_size);
 
 	//more debug stuff
-	int *all_data;
+	long int *all_data;
 	all_data = prog_data;
 	char *output;
 	unsigned int char_index = 0;
@@ -80,21 +104,36 @@ int main(int argc, char **argv){
 
 	//the main stuff
 	while(cur_cmd < strlen(program)){
-		if(debug)
+		if(debug){
 			printdebug(program, all_data, (prog_data - all_data),
 				cur_cmd, output);
+		}
 		
 		switch (program[cur_cmd]){
 			case '+':
 				(*prog_data)++;
 				break;
 			case '-':
+				if(!allow_neg && *prog_data == 0){
+					fprintf(stderr, "error: negative value not allowed\n");
+					return 0;
+				}
 				(*prog_data)--;
 				break;
 			case '>':
+				if(remaining_cells == 1){
+					fprintf(stderr, "error: cannot move any farther right\n");
+					return 1;
+				}
 				prog_data++;
+				remaining_cells--;
 				break;
 			case '<':
+				if(remaining_cells >= prog_data_size){
+					fprintf(stderr, "error: cannot move any farther left\n");
+					return 1;
+				}
+				remaining_cells++;
 				prog_data--;
 				break;
 			case '.':
@@ -105,8 +144,17 @@ int main(int argc, char **argv){
 				}
 				break;
 			case ',':
-				*prog_data = getchar();
-				break;
+				//for variable scope stuff
+				{
+					//eof stuff
+					int inchar = getchar();
+					if(inchar == EOF && !eof_do_nothing){
+						*prog_data = eof_num;
+					}else{
+						*prog_data = getchar();
+					}
+					break;
+				}
 			case '[':
 				if(*prog_data == 0){
 					int jump_depth = 0;
@@ -184,7 +232,7 @@ char* loadprogram(char *path){
 	return file_string;
 }
 
-void printdebug(char *program, int *program_data,
+void printdebug(char *program, long int *program_data,
 unsigned int data_pos, unsigned int prog_pos, char *output){
 	static unsigned int steps;
 	//clear screen
@@ -193,8 +241,8 @@ unsigned int data_pos, unsigned int prog_pos, char *output){
 	fprintf(stdout, "data:\t");
 	unsigned int i;
 	//print prog data
-	for(i = 0; i < PROG_DATA_SIZE; i++){
-		fprintf(stdout, "%3i ", program_data[i]);
+	for(i = 0; i < prog_data_size; i++){
+		fprintf(stdout, "%3li ", program_data[i]);
 	}
 
 	//print arrows
@@ -242,12 +290,17 @@ unsigned int data_pos, unsigned int prog_pos, char *output){
 }
 
 void printusage(char *cmd){
-	fprintf(stdout, "usage: %s [options] file\noptions:\n"
-	"  -h  --help\tyep\n"
-	"  -d \t\trun in debug mode\n"
-	"debug options:\n"
-	"  -s <step>\tbreak at step (overrides -b)\n"
-	"  -b <point>\tput break point at position, if omitted\n"
-	"\t\tbreakpoin will be set at position 0\n"
+	fprintf(stdout, "usage: %s [options] <file | -p>\noptions:\n\n"
+	"  -h  --help              yep\n"
+	"  -d  --debug             run in debug mode\n"
+	"  -e  --eof   <num>       value to set when eof (default is to do nothing)\n"
+	"  -p  --prog <prog_str>   get program from argument instead of file\n"
+	"  -m  --mem  <cells | 0>  how many cells to allocate (default 256)\n"
+	"  -n  --noneg             don't allow cells to be negative\n"
+	"\ndebug options:\n"
+	"  -s  --step  <step>      break at step (overrides -b)\n"
+	"  -b  --break <point>     put break point at position\n"
+	"\nauthor:\n"
+	"  fuck\n"
 	, cmd);
 }
