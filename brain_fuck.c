@@ -8,65 +8,37 @@
 #define DEBUG_OUTPUT_SIZE 100
 #define PROG_BUF_BLOCK 16
 
-void printdebug(char *program, long int *program_data,
+struct options{
+	bool do_nothing_at_eof;
+	int eof_value;
+
+	bool source_from_args;
+	bool source_from_stdin;
+	bool path_set;
+	char *file_path;
+	char *source;
+
+	bool allow_negative;
+	bool debug_mode;
+	bool output_and_exit;
+}program;
+
+void printdebug(long int *program_data,
 	unsigned int data_pos, unsigned int prog_pos, char *output);
 void printusage(char *cmd);
-char* loadprogram(char *path);
+char* load_program(FILE * programfile);
+int parseargs(int argc, char **argv);
 
 //debug stuff
 unsigned int break_point = 0, break_step = 0;
 unsigned long int prog_data_size = DEFAULT_PROG_DATA_SIZE;
 
 int main(int argc, char **argv){
-	bool debug = false, path_set = false, eof_do_nothing = true;
-	bool prog_from_args = false, dynamic_allocate = false, allow_neg = true;
-	char *prog_file_path;
-	unsigned int eof_num = 0;
-	char *program;
 
 	//arg stuff (this could be nicer)
 	if(argc >= 2){
-		int i;
-		for(i = 1; i < argc; i++){
-			if(strcmp(argv[i], "--help") == 0
-			|| strcmp(argv[i], "-h") == 0){
-				printusage(argv[0]);
-				return 0;
-			}else if(strcmp(argv[i], "--debug") == 0
-			|| strcmp(argv[i], "-d") == 0){
-				debug = true;
-			}else if(strcmp(argv[i], "--eof") == 0
-			|| strcmp(argv[i], "-e") == 0){
-				eof_do_nothing = false;
-				eof_num = (int)strtol(argv[i + 1], NULL, 10);
-				i++;
-			}else if(strcmp(argv[i], "--prog") == 0
-			|| strcmp(argv[i], "-p") == 0){
-				prog_from_args = true;
-				program = argv[i + 1];
-				i++;
-			}else if(strcmp(argv[i], "--mem") == 0
-			|| strcmp(argv[i], "-m") == 0){
-				prog_data_size = (int)strtol(argv[i + 1], NULL, 10);
-				if(prog_data_size <= 0){
-					dynamic_allocate = true;
-				}
-				i++;
-			}else if(strcmp(argv[i], "--noneg") == 0
-			|| strcmp(argv[i], "n") == 0){
-				allow_neg = false;
-			}else if(strcmp(argv[i], "--step") == 0
-			|| strcmp(argv[i], "-s") == 0){
-				break_step = (int)strtol(argv[i + 1], NULL, 10);
-				i++;
-			}else if(strcmp(argv[i], "--break") == 0
-			|| strcmp(argv[i], "-b") == 0){
-				break_point = (int)strtol(argv[i + 1], NULL, 10);
-				i++;
-			}else if(!prog_from_args){
-				prog_file_path = argv[i];
-				path_set = true;
-			}
+		if(parseargs(argc, argv)){
+			return 1;
 		}
 	}else{
 		fprintf(stderr, "must at least specify a file\n");
@@ -75,15 +47,29 @@ int main(int argc, char **argv){
 	}
 
 	//load from file
-	if(path_set && !prog_from_args){
-		program = loadprogram(prog_file_path);
-		if(program == NULL){
+	if(program.path_set && !program.source_from_args && !program.source_from_stdin){
+		FILE * program_file = fopen(program.file_path, "r");
+		if(program_file == NULL){
+			fprintf(stderr, "program file %s could not be opened\n", program.file_path);
 			return 1;
 		}
-	}else if(!prog_from_args){
+		program.source = load_program(program_file);
+		if(program.source == NULL){
+			return 1;
+		}
+	}else if(program.source_from_stdin){
+		program.source = load_program(stdin);
+	}else if(program.source_from_args){
+
+	}else{
 		fprintf(stderr, "must specify a file\n");
 		printusage(argv[0]);
 		return 1;
+	}
+
+	if(program.output_and_exit){
+		printf("%s", program.source);
+		return 0;
 	}
 
 
@@ -99,22 +85,22 @@ int main(int argc, char **argv){
 	all_data = prog_data;
 	char *output;
 	unsigned int char_index = 0;
-	if(debug)
+	if(program.debug_mode)
 		output = (char*)malloc(sizeof(char) * DEBUG_OUTPUT_SIZE);
 
 	//the main stuff
-	while(cur_cmd < strlen(program)){
-		if(debug){
-			printdebug(program, all_data, (prog_data - all_data),
+	while(cur_cmd < strlen(program.source)){
+		if(program.debug_mode){
+			printdebug(all_data, (prog_data - all_data),
 				cur_cmd, output);
 		}
 		
-		switch (program[cur_cmd]){
+		switch (program.source[cur_cmd]){
 			case '+':
 				(*prog_data)++;
 				break;
 			case '-':
-				if(!allow_neg && *prog_data == 0){
+				if(!program.allow_negative && *prog_data == 0){
 					fprintf(stderr, "error: negative value not allowed\n");
 					return 0;
 				}
@@ -138,7 +124,7 @@ int main(int argc, char **argv){
 				break;
 			case '.':
 				putchar(*prog_data);
-				if(debug){
+				if(program.debug_mode){
 					output[char_index] = *prog_data;
 					char_index++;
 				}
@@ -148,8 +134,8 @@ int main(int argc, char **argv){
 				{
 					//eof stuff
 					int inchar = getchar();
-					if(inchar == EOF && !eof_do_nothing){
-						*prog_data = eof_num;
+					if(inchar == EOF && !program.do_nothing_at_eof){
+						*prog_data = program.eof_value;
 					}else{
 						*prog_data = getchar();
 					}
@@ -159,10 +145,10 @@ int main(int argc, char **argv){
 				if(*prog_data == 0){
 					int jump_depth = 0;
 					cur_cmd++;
-					while(program[cur_cmd] != ']' || jump_depth != 0){
-						if(program[cur_cmd] == ']'){
+					while(program.source[cur_cmd] != ']' || jump_depth != 0){
+						if(program.source[cur_cmd] == ']'){
 							jump_depth--;
-						}else if(program[cur_cmd] == '['){
+						}else if(program.source[cur_cmd] == '['){
 							jump_depth++;
 						}
 						cur_cmd++;
@@ -173,10 +159,10 @@ int main(int argc, char **argv){
 				if(*prog_data != 0){
 					int jump_depth = 0;
 					cur_cmd--;
-					while(program[cur_cmd] != '[' || jump_depth != 0){
-						if(program[cur_cmd] == ']'){
+					while(program.source[cur_cmd] != '[' || jump_depth != 0){
+						if(program.source[cur_cmd] == ']'){
 							jump_depth++;
-						}else if(program[cur_cmd] == '['){
+						}else if(program.source[cur_cmd] == '['){
 							jump_depth--;
 						}
 						cur_cmd--;
@@ -190,8 +176,8 @@ int main(int argc, char **argv){
 		cur_cmd++;
 	}
 	//mmmmm hmmmm
-	if(debug){
-		printdebug(program, all_data, (prog_data - all_data),
+	if(program.debug_mode){
+		printdebug(all_data, (prog_data - all_data),
 			cur_cmd, output);
 		printf("program ended\n");
 	}
@@ -201,15 +187,7 @@ int main(int argc, char **argv){
 
 
 
-char* loadprogram(char *path){
-	FILE *prog_file;
-	prog_file = fopen(path, "r");
-
-	if(prog_file == NULL){
-		fprintf(stderr, "program file %s could not be opened\n", path);
-		return NULL;
-	}
-
+char* load_program(FILE * prog_file){
 	int buff_blocks = 1, c, pos = 0;
 	char *file_string;
 	file_string = (char*)malloc(sizeof(char) * PROG_BUF_BLOCK * buff_blocks);
@@ -232,7 +210,7 @@ char* loadprogram(char *path){
 	return file_string;
 }
 
-void printdebug(char *program, long int *program_data,
+void printdebug(long int *program_data,
 unsigned int data_pos, unsigned int prog_pos, char *output){
 	static unsigned int steps;
 	//clear screen
@@ -267,11 +245,11 @@ unsigned int data_pos, unsigned int prog_pos, char *output){
 	
 	//print program
 	fprintf(stdout, "\nprog:\t");
-	for(i = 0; i < strlen(program); i++){
+	for(i = 0; i < strlen(program.source); i++){
 		if(i == prog_pos){
 			fprintf(stdout, "|");
 		}
-		fprintf(stdout, "%c", program[i]);
+		fprintf(stdout, "%c", program.source[i]);
 	}
 
 	//show output
@@ -289,14 +267,65 @@ unsigned int data_pos, unsigned int prog_pos, char *output){
 	//sleep(1);
 }
 
+int parseargs(int argc, char **argv){
+	int i;
+	for(i = 1; i < argc; i++){
+		if(strcmp(argv[i], "--help") == 0
+		|| strcmp(argv[i], "-h") == 0){
+			printusage(argv[0]);
+			return 1;
+		}else if(strcmp(argv[i], "--debug") == 0
+		|| strcmp(argv[i], "-d") == 0){
+			program.debug_mode = true;
+		}else if(strcmp(argv[i], "--eof") == 0
+		|| strcmp(argv[i], "-e") == 0){
+			program.do_nothing_at_eof = false;
+			program.eof_value = (int)strtol(argv[i + 1], NULL, 10);
+			i++;
+		}else if((strcmp(argv[i], "--prog") == 0
+		|| strcmp(argv[i], "-p") == 0) && !program.source_from_stdin){
+			program.source_from_args = true;
+			program.source = argv[i + 1];
+			i++;
+		}else if(strcmp(argv[i], "--mem") == 0
+		|| strcmp(argv[i], "-m") == 0){
+			prog_data_size = (int)strtol(argv[i + 1], NULL, 10);
+			i++;
+		}else if(strcmp(argv[i], "--noneg") == 0
+		|| strcmp(argv[i], "n") == 0){
+			program.allow_negative = false;
+		}else if(strcmp(argv[i], "--step") == 0
+		|| strcmp(argv[i], "-s") == 0){
+			break_step = (int)strtol(argv[i + 1], NULL, 10);
+			i++;
+		}else if(strcmp(argv[i], "--break") == 0
+		|| strcmp(argv[i], "-b") == 0){
+			break_point = (int)strtol(argv[i + 1], NULL, 10);
+			i++;
+		}else if(strcmp(argv[i], "--stdin") == 0
+		|| strcmp(argv[i], "-i") == 0){
+			program.source_from_stdin = true;
+		}else if(strcmp(argv[i], "--output") == 0
+		|| strcmp(argv[i], "-o") == 0){
+			program.output_and_exit = true;
+		}else if(!program.source_from_args && !program.source_from_stdin){
+			program.file_path = argv[i];
+			program.path_set = true;
+		}
+	}
+	return 0;
+}
+
 void printusage(char *cmd){
-	fprintf(stdout, "usage: %s [options] <file | -p>\noptions:\n\n"
+	fprintf(stdout, "usage: %s [options] [file | -p]\noptions:\n\n"
 	"  -h  --help              yep\n"
 	"  -d  --debug             run in debug mode\n"
 	"  -e  --eof   <num>       value to set when eof (default is to do nothing)\n"
 	"  -p  --prog <prog_str>   get program from argument instead of file\n"
 	"  -m  --mem  <cells | 0>  how many cells to allocate (default 256)\n"
 	"  -n  --noneg             don't allow cells to be negative\n"
+	"  -o  --output            output stripped program and exit\n"
+	"  -i  --stdin             get program from stdin until EOF\n"
 	"\ndebug options:\n"
 	"  -s  --step  <step>      break at step (overrides -b)\n"
 	"  -b  --break <point>     put break point at position\n"
