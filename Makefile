@@ -9,3 +9,5 @@ $(TARGET): brain_fuck.c
 
 debug: brain_fuck.c
 	$(CC) $(CFLAGS) -o $(TARGET) $^ -g
+
+#clean it up yourself
