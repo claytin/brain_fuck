@@ -21,6 +21,8 @@ struct options{
 	bool allow_negative;
 	bool debug_mode;
 	bool output_and_exit;
+	bool compile_and_exit;
+	unsigned long int number_of_cells;
 }program;
 
 void printdebug(long int *program_data,
@@ -28,12 +30,13 @@ void printdebug(long int *program_data,
 void printusage(char *cmd);
 char* load_program(FILE * programfile);
 int parseargs(int argc, char **argv);
+void compile_to_c();
 
 //debug stuff
 unsigned int break_point = 0, break_step = 0;
-unsigned long int prog_data_size = DEFAULT_PROG_DATA_SIZE;
 
 int main(int argc, char **argv){
+	program.number_of_cells = DEFAULT_PROG_DATA_SIZE;
 
 	//arg stuff (this could be nicer)
 	if(argc >= 2){
@@ -68,17 +71,20 @@ int main(int argc, char **argv){
 	}
 
 	if(program.output_and_exit){
-		printf("%s", program.source);
+		printf("%s\n", program.source);
+		return 0;
+	}else if(program.compile_and_exit){
+		compile_to_c();
 		return 0;
 	}
 
 
 	unsigned int cur_cmd = 0;
-	unsigned int remaining_cells = prog_data_size;
+	unsigned int remaining_cells = program.number_of_cells;
 	long int *prog_data;
 
 	//allocate space for program to
-	prog_data = (long int*)malloc(sizeof(long int*) * prog_data_size);
+	prog_data = (long int*)malloc(sizeof(long int*) * program.number_of_cells);
 
 	//more debug stuff
 	long int *all_data;
@@ -115,7 +121,7 @@ int main(int argc, char **argv){
 				remaining_cells--;
 				break;
 			case '<':
-				if(remaining_cells >= prog_data_size){
+				if(remaining_cells >= program.number_of_cells){
 					fprintf(stderr, "error: cannot move any farther left\n");
 					return 1;
 				}
@@ -219,7 +225,7 @@ unsigned int data_pos, unsigned int prog_pos, char *output){
 	fprintf(stdout, "data:\t");
 	unsigned int i;
 	//print prog data
-	for(i = 0; i < prog_data_size; i++){
+	for(i = 0; i < program.number_of_cells; i++){
 		fprintf(stdout, "%3li ", program_data[i]);
 	}
 
@@ -289,7 +295,7 @@ int parseargs(int argc, char **argv){
 			i++;
 		}else if(strcmp(argv[i], "--mem") == 0
 		|| strcmp(argv[i], "-m") == 0){
-			prog_data_size = (int)strtol(argv[i + 1], NULL, 10);
+			program.number_of_cells = (int)strtol(argv[i + 1], NULL, 10);
 			i++;
 		}else if(strcmp(argv[i], "--noneg") == 0
 		|| strcmp(argv[i], "n") == 0){
@@ -308,6 +314,9 @@ int parseargs(int argc, char **argv){
 		}else if(strcmp(argv[i], "--output") == 0
 		|| strcmp(argv[i], "-o") == 0){
 			program.output_and_exit = true;
+		}else if(strcmp(argv[i], "--compile") == 0
+		|| strcmp(argv[i], "-c") == 0){
+			program.compile_and_exit = true;
 		}else if(!program.source_from_args && !program.source_from_stdin){
 			program.file_path = argv[i];
 			program.path_set = true;
@@ -316,8 +325,67 @@ int parseargs(int argc, char **argv){
 	return 0;
 }
 
+void indent(int level){
+	while(level--){
+		printf("\t");
+	}
+}
+
+void compile_to_c(){
+	printf("#include <stdio.h>\n"
+			"#include <stdlib.h>\n"
+			"int main(){\n"
+			"\tlong int *p = (long int*)malloc(sizeof(long int*) * %lu);\n\n",
+			program.number_of_cells);
+
+	unsigned int prog_pos = 0, indent_level = 1;
+	while(prog_pos < strlen(program.source)){
+		switch(program.source[prog_pos]){
+			case '+':
+				indent(indent_level);
+				printf("(*p)++;\n");
+				break;
+			case '-':
+				indent(indent_level);
+				printf("(*p)--;\n");
+				break;
+			case '>':
+				indent(indent_level);
+				printf("p++;\n");
+				break;
+			case '<':
+				indent(indent_level);
+				printf("p--;\n");
+				break;
+			case '[':
+				indent(indent_level);
+				printf("while(*p){\n");
+				indent_level++;
+				break;
+			case ']':
+				indent_level--;
+				indent(indent_level);
+				printf("}\n");
+				break;
+			case '.':
+				indent(indent_level);
+				printf("putchar(*p);\n");
+				break;
+			case ',':
+				indent(indent_level);
+				printf("*p = getchar();\n");
+				break;
+		}
+		prog_pos++;
+	}
+	
+	printf("\n");
+	indent(indent_level);
+	printf("return 0;\n}\n");
+}
+
 void printusage(char *cmd){
-	fprintf(stdout, "usage: %s [options] [file | -p]\noptions:\n\n"
+	fprintf(stdout, "usage: %s [options] [file | -p]\noptions:\n"
 	"  -h  --help              yep\n"
 	"  -d  --debug             run in debug mode\n"
 	"  -e  --eof   <num>       value to set when eof (default is to do nothing)\n"
@@ -326,6 +394,7 @@ void printusage(char *cmd){
 	"  -n  --noneg             don't allow cells to be negative\n"
 	"  -o  --output            output stripped program and exit\n"
 	"  -i  --stdin             get program from stdin until EOF\n"
+	"  -c  --compile           compile to C program\n"
 	"\ndebug options:\n"
 	"  -s  --step  <step>      break at step (overrides -b)\n"
 	"  -b  --break <point>     put break point at position\n"
