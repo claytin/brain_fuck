@@ -1,8 +1,11 @@
 CC = gcc
-CFLAGS = -g -Wall
-TARGET = brain_fuck_int
+CFLAGS = -Wall
+TARGET = bf
 
 all: $(TARGET)
 
 $(TARGET): brain_fuck.c
 	$(CC) $(CFLAGS) -o $(TARGET) $^
+
+debug: brain_fuck.c
+	$(CC) $(CFLAGS) -o $(TARGET) $^ -g
