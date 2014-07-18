@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <unistd.h>
 
-#define DEFAULT_PROG_DATA_SIZE 250
+#define DEFAULT_PROG_DATA_SIZE 256
 #define DEBUG_OUTPUT_SIZE 100
 #define PROG_BUF_BLOCK 16
 
@@ -73,18 +73,19 @@ int main(int argc, char **argv){
 	if(program.output_and_exit){
 		printf("%s\n", program.source);
 		return 0;
+		free(program.source);
 	}else if(program.compile_and_exit){
 		compile_to_c();
+		free(program.source);
 		return 0;
 	}
 
 
 	unsigned int cur_cmd = 0;
 	unsigned int remaining_cells = program.number_of_cells;
-	long int *prog_data;
 
 	//allocate space for program to
-	prog_data = (long int*)malloc(sizeof(long int*) * program.number_of_cells);
+	long int *prog_data = (long int*)malloc(sizeof(long int*) * program.number_of_cells);
 
 	//more debug stuff
 	long int *all_data;
@@ -187,6 +188,11 @@ int main(int argc, char **argv){
 			cur_cmd, output);
 		printf("program ended\n");
 	}
+
+	//freefdsafffddeeee
+	free(all_data);
+	free(output);
+	free(program.source);
 
 	return 0;
 }
