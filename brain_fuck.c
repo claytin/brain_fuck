@@ -335,7 +335,8 @@ void compile_to_c(){
 	printf("#include <stdio.h>\n"
 			"#include <stdlib.h>\n"
 			"int main(){\n"
-			"\tlong int *p = (long int*)malloc(sizeof(long int*) * %lu);\n\n",
+			"\tlong int *d = (long int*)malloc(sizeof(long int*) * %lu);\n"
+			"\tlong int *p = d;\n\n",
 			program.number_of_cells);
 
 	unsigned int prog_pos = 0, indent_level = 1;
@@ -381,11 +382,13 @@ void compile_to_c(){
 	
 	printf("\n");
 	indent(indent_level);
+	printf("free(d);\n");
+	indent(indent_level);
 	printf("return 0;\n}\n");
 }
 
 void printusage(char *cmd){
-	fprintf(stdout, "usage: %s [options] [file | -p]\noptions:\n"
+	fprintf(stdout, "usage: %s [options] <file | -p | -i>\noptions:\n"
 	"  -h  --help              yep\n"
 	"  -d  --debug             run in debug mode\n"
 	"  -e  --eof   <num>       value to set when eof (default is to do nothing)\n"
