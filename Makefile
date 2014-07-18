@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall
-TARGET = bf
+TARGET = bfuck
 
 all: $(TARGET)
 
