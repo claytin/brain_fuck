@@ -18,7 +18,7 @@ struct options{
 	char *file_path;
 	char *source;
 
-	bool allow_negative;
+	bool disallow_negative;
 	bool debug_mode;
 	bool output_and_exit;
 	bool compile_and_exit;
@@ -85,7 +85,7 @@ int main(int argc, char **argv){
 	unsigned int remaining_cells = program.number_of_cells;
 
 	//allocate space for program to
-	long int *prog_data = (long int*)malloc(sizeof(long int*) * program.number_of_cells);
+	long int *prog_data = malloc(sizeof(long int) * program.number_of_cells);
 
 	//more debug stuff
 	long int *all_data;
@@ -93,7 +93,7 @@ int main(int argc, char **argv){
 	char *output;
 	unsigned int char_index = 0;
 	if(program.debug_mode)
-		output = (char*)malloc(sizeof(char) * DEBUG_OUTPUT_SIZE);
+		output = malloc(sizeof(char) * DEBUG_OUTPUT_SIZE);
 
 	//the main stuff
 	while(cur_cmd < strlen(program.source)){
@@ -107,7 +107,7 @@ int main(int argc, char **argv){
 				(*prog_data)++;
 				break;
 			case '-':
-				if(!program.allow_negative && *prog_data == 0){
+				if(program.disallow_negative && *prog_data == 0){
 					fprintf(stderr, "error: negative value not allowed\n");
 					return 0;
 				}
@@ -202,7 +202,7 @@ int main(int argc, char **argv){
 char* load_program(FILE * prog_file){
 	int buff_blocks = 1, c, pos = 0;
 	char *file_string;
-	file_string = (char*)malloc(sizeof(char) * PROG_BUF_BLOCK * buff_blocks);
+	file_string = malloc(sizeof(char) * PROG_BUF_BLOCK * buff_blocks);
 
 	while((c = getc(prog_file)) != EOF){
 		switch(c){	//only allow program characters
@@ -305,7 +305,7 @@ int parseargs(int argc, char **argv){
 			i++;
 		}else if(strcmp(argv[i], "--noneg") == 0
 		|| strcmp(argv[i], "n") == 0){
-			program.allow_negative = false;
+			program.disallow_negative = true;
 		}else if(strcmp(argv[i], "--step") == 0
 		|| strcmp(argv[i], "-s") == 0){
 			break_step = (int)strtol(argv[i + 1], NULL, 10);
@@ -341,7 +341,7 @@ void compile_to_c(){
 	printf("#include <stdio.h>\n"
 			"#include <stdlib.h>\n"
 			"int main(){\n"
-			"\tlong int *d = (long int*)malloc(sizeof(long int*) * %lu);\n"
+			"\tlong int *d = malloc(sizeof(long int) * %lu);\n"
 			"\tlong int *p = d;\n\n",
 			program.number_of_cells);
 
